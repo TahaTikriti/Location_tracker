@@ -1,0 +1,19 @@
+
+{
+    "1": {
+        "currentLocation": [37.7749, -122.4194],
+        "lastUpdate": "2026-02-24T15:30:00.000Z",
+        "isSharingEnabled": true,
+        "allowedUsers": [2, 3],
+        "history": [
+            {
+                "location": [37.7749, -122.4194],
+                "timestamp": "2026-02-24T15:30:00.000Z"
+            },
+            {
+                "location": [37.7750, -122.4195],
+                "timestamp": "2026-02-24T15:35:00.000Z"
+            }
+        ]
+    }
+}

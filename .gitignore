@@ -1,4 +1,3 @@
 node_modules/
 dist/
-data/db/users.json
-data/db/locations.json
+
