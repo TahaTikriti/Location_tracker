@@ -1,13 +1,18 @@
 // Example using Express.js
 const express = require("express");
-const app = express();
 
-const cors = require("cors");
 app.use(cors());
-const authRoutes = require("./routes/authRoutes");
+const authRoutes = require("./routes/auth.routes");
+const locationRoutes = require("./routes/location.route");
+const app = express();
+app.use(express.json()); // Middleware to parse JSON bodies
+
+// Use the imported routes
 app.use("/api/auth", authRoutes);
-const locationRoutes = require("./routes/locationRoutes");
-app.use("/api/locations", locationRoutes);
+app.use("/api/location", locationRoutes);
+
+
+
 
 // Example defining a route in Express
 app.get("/", (req, res) => {
