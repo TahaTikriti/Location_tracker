@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 // Example using Express.js
 const express = require("express");
 const cors = require("cors");
@@ -27,26 +29,7 @@ app.get("/", (req, res) => {
   res.send("<h1>Hello, Express.js Server!</h1>");
 });
 
-// ── Persist data to JSON files every 5 seconds ──────────────────────────────
-const fs = require("fs");
-const path = require("path");
-const users = require("./data/users");
-const userLocations = require("./data/locations");
-const { encryptUserLocations } = require("./utils/encryptUtil");
-
-setInterval(() => {
-  fs.writeFileSync(
-    path.join(__dirname, "data", "db", "users.json"),
-    JSON.stringify(users, null, 2),
-  );
-  fs.writeFileSync(
-    path.join(__dirname, "data", "db", "locations.json"),
-    JSON.stringify(encryptUserLocations(userLocations), null, 2),
-  );
-}, 5000);
-// ─────────────────────────────────────────────────────────────────────────────
-
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3000; // You can use environment variables for port configuration
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
   console.log(`WebSocket available on ws://localhost:${port}`);
