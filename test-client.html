@@ -11,7 +11,7 @@
 <div style="display:flex; height:calc(100vh - 44px); gap:12px;">
 
     <!-- LEFT -->
-    <div style="width:300px; overflow-y:auto; flex-shrink:0; padding-right:8px;">
+    <div style="width:310px; overflow-y:auto; flex-shrink:0; padding-right:8px;">
 
         <details open>
             <summary><b>Auth</b></summary>
@@ -34,9 +34,11 @@
         <details open>
             <summary><b>My Location</b></summary>
             <br>
-            <button onclick="mockUpdate()">Simulate Location Update</button><br><br>
+            <button id="autoBtn" onclick="toggleAuto()">Start Auto-Update (every 20s)</button><br><br>
+            <button onclick="mockUpdate()">Send One Mock Update</button><br><br>
             <button onclick="deviceUpdate()">Send My Real GPS</button><br><br>
-            <button onclick="getMyLocation()">View My Saved Location</button>
+            <button onclick="getMyLocation()">View My Saved Location</button><br><br>
+            <button onclick="getMyHistory()">View My History</button>
         </details>
 
         <hr>
@@ -47,7 +49,7 @@
             <button onclick="startSharing()">Start Sharing My Location</button><br><br>
             <button onclick="stopSharing()">Stop Sharing</button>
             <p style="margin:8px 0 2px">
-                <b>Allow users to see me</b>
+                <b>Other users</b>
                 <button onclick="loadUsers()" style="font-size:11px">refresh</button>
             </p>
             <div id="userList" style="margin-bottom:8px"></div>
@@ -69,6 +71,7 @@
     const WS_URL = 'ws://localhost:3000';
     let token = null;
     let ws = null;
+    let autoInterval = null;
 
     function show(data) {
         document.getElementById('output').textContent = JSON.stringify(data, null, 2);
@@ -94,7 +97,7 @@
         }
     }
 
-    // Auth
+    //  Auth 
     async function register() {
         try {
             const res = await fetch(API + '/auth/register', {
@@ -125,21 +128,34 @@
 
             token = data.token;
 
-            // Fetch profile to display name
             const profRes = await fetch(API + '/users/profile', { headers: authHeaders() });
             const profile  = await profRes.json();
             document.getElementById('meDisplay').textContent = profile.name || profile.email || '';
 
             show({ message: 'Login successful', loggedInAs: profile.name });
 
-            connectWS();   // auto-connect websocket
-            loadUsers();   // populate sharing list
+            connectWS();
+            loadUsers();
         } catch (e) { show({ error: e.message }); }
     }
 
-    // Location
+    //  Location 
     async function mockUpdate() {
+        // Empty body -> server auto-generates a nearby mock GPS coordinate
         await api('POST', '/location/update', {});
+    }
+
+    function toggleAuto() {
+        const btn = document.getElementById('autoBtn');
+        if (autoInterval) {
+            clearInterval(autoInterval);
+            autoInterval = null;
+            btn.textContent = 'Start Auto-Update (every 20s)';
+        } else {
+            mockUpdate(); // immediate first update
+            autoInterval = setInterval(mockUpdate, 20000);
+            btn.textContent = 'Stop Auto-Update';
+        }
     }
 
     function deviceUpdate() {
@@ -153,8 +169,9 @@
     }
 
     async function getMyLocation() { await api('GET', '/location/current'); }
+    async function getMyHistory()  { await api('GET', '/location/history'); }
 
-    // Sharing
+    //  Sharing 
     async function startSharing() { await api('POST', '/location/sharing/start'); }
     async function stopSharing()  { await api('POST', '/location/sharing/stop');  }
 
@@ -171,18 +188,19 @@
             el.innerHTML = data.users.map(u =>
                 u.name + ' &nbsp;'
                 + '<button onclick="allowUser(\'' + u.name + '\')">Allow</button> '
-                + '<button onclick="removeUser(\'' + u.name + '\')">Remove</button><br>'
+                + '<button onclick="removeUser(\'' + u.name + '\')">Remove</button> '
+                + '<button onclick="viewHistory(\'' + u.name + '\')">History</button><br>'
             ).join('');
         } catch (e) { show({ error: e.message }); }
     }
 
-    async function allowUser(name)  { await api('POST', '/location/sharing/allow/'  + encodeURIComponent(name)); }
-    async function removeUser(name) { await api('POST', '/location/sharing/remove/' + encodeURIComponent(name)); }
+    async function allowUser(name)   { await api('POST', '/location/sharing/allow/'  + encodeURIComponent(name)); }
+    async function removeUser(name)  { await api('POST', '/location/sharing/remove/' + encodeURIComponent(name)); }
+    async function viewHistory(name) { await api('GET',  '/location/history/'         + encodeURIComponent(name)); }
 
-    // Shows current location of users who have explicitly allowed you to see them
     async function getShared() { await api('GET', '/location/shared'); }
 
-    // WebSocket - connects automatically after login
+    //  WebSocket 
     function connectWS() {
         if (ws) return;
         ws = new WebSocket(WS_URL);
@@ -192,6 +210,7 @@
         };
         ws.onmessage = (e) => {
             const msg = JSON.parse(e.data);
+            // Show live location pushes from other users in real time
             if (msg.type === 'location_update') {
                 show({ live_update_from: msg.userName, location: msg.location, time: msg.timestamp });
             }

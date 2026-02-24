@@ -31,7 +31,7 @@ function setupWebSocket(server) {
       // STEP 1: Authenticate user first
       if (data.type === "auth") {
         try {
-          const decoded = jwt.verify(data.token, "123");
+          const decoded = jwt.verify(data.token, "your-secret-key");
           ws.userId = decoded.id; // Save user ID to this connection
           ws.send(
             JSON.stringify({ type: "auth_success", message: "Connected" }),

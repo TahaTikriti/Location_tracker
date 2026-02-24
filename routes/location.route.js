@@ -175,4 +175,48 @@ router.get("/shared", authMiddleware, (req, res) => {
   res.json({ locations: sharedLocations });
 });
 
+// 8. Get my own location history (one entry per ~20 seconds)
+router.get("/history", authMiddleware, (req, res) => {
+  const userId = req.user.id;
+  ensureUserLocation(userId);
+  const history = userLocations[userId].history.filter(
+    (entry, i, arr) =>
+      i === 0 ||
+      new Date(entry.timestamp) - new Date(arr[i - 1].timestamp) >= 18000,
+  );
+  res.json({ history });
+});
+
+// 9. Get another user's location history (only if they allowed you and are sharing)
+router.get("/history/:name", authMiddleware, (req, res) => {
+  const myId = req.user.id;
+  const targetUser = users.find(
+    (u) => u.name.toLowerCase() === req.params.name.toLowerCase(),
+  );
+
+  if (!targetUser) {
+    return res
+      .status(404)
+      .json({ message: `User "${req.params.name}" not found` });
+  }
+
+  const entry = userLocations[targetUser.id];
+  if (!entry) {
+    return res.status(404).json({ message: "User has no location data yet" });
+  }
+
+  if (!entry.isSharingEnabled || !entry.allowedUsers.includes(myId)) {
+    return res
+      .status(403)
+      .json({ message: "This user has not allowed you to see their location" });
+  }
+
+  const history = entry.history.filter(
+    (e, i, arr) =>
+      i === 0 ||
+      new Date(e.timestamp) - new Date(arr[i - 1].timestamp) >= 18000,
+  );
+  res.json({ userName: targetUser.name, history });
+});
+
 module.exports = router;
