@@ -1,6 +1,21 @@
 const WebSocket = require("ws");
 const jwt = require("jsonwebtoken");
 const userLocations = require("./data/locations");
+const users = require("./data/users");
+const generateLocation = require("./utils/generateLocation");
+
+function ensureUserLocation(userId) {
+  if (!userLocations[userId]) {
+    const location = generateLocation();
+    userLocations[userId] = {
+      currentLocation: location,
+      lastUpdate: new Date(),
+      isSharingEnabled: false,
+      allowedUsers: [],
+      history: [{ location, timestamp: new Date() }],
+    };
+  }
+}
 
 // Setup WebSocket for live location tracking
 function setupWebSocket(server) {
@@ -16,7 +31,7 @@ function setupWebSocket(server) {
       // STEP 1: Authenticate user first
       if (data.type === "auth") {
         try {
-          const decoded = jwt.verify(data.token, "your-secret-key");
+          const decoded = jwt.verify(data.token, "123");
           ws.userId = decoded.id; // Save user ID to this connection
           ws.send(
             JSON.stringify({ type: "auth_success", message: "Connected" }),
@@ -31,33 +46,25 @@ function setupWebSocket(server) {
       if (data.type === "update_location" && ws.userId) {
         const { location } = data;
 
-        // Save new location
-        if (userLocations[ws.userId]) {
-          userLocations[ws.userId].currentLocation = location;
-          userLocations[ws.userId].lastUpdate = new Date();
-          userLocations[ws.userId].history.push({
+        // Auto-initialize if needed, then save new location
+        ensureUserLocation(ws.userId);
+        userLocations[ws.userId].currentLocation = location;
+        userLocations[ws.userId].lastUpdate = new Date();
+        userLocations[ws.userId].history.push({
+          location,
+          timestamp: new Date(),
+        });
+
+        // Broadcast to allowed users who are connected
+        sendLocationToAllowedUsers(wss, ws.userId, location);
+
+        ws.send(
+          JSON.stringify({
+            type: "location_saved",
             location,
-            timestamp: new Date(),
-          });
-
-          // Send updated location to other users who are allowed
-          sendLocationToAllowedUsers(wss, ws.userId, location);
-
-          ws.send(
-            JSON.stringify({
-              type: "location_saved",
-              location,
-              message: "Updated",
-            }),
-          );
-        } else {
-          ws.send(
-            JSON.stringify({
-              type: "error",
-              message: "Call /initialize first",
-            }),
-          );
-        }
+            message: "Updated",
+          }),
+        );
       }
 
       // STEP 3: Request shared locations
@@ -97,10 +104,12 @@ function sendLocationToAllowedUsers(wss, senderId, location) {
       sender.allowedUsers.includes(client.userId) && // User is allowed
       client.readyState === WebSocket.OPEN // Connection is open
     ) {
+      const senderUser = users.find((u) => u.id === senderId);
       client.send(
         JSON.stringify({
           type: "location_update",
           userId: senderId,
+          userName: senderUser ? senderUser.name : "Unknown",
           location: location,
           timestamp: new Date(),
         }),
@@ -123,8 +132,10 @@ function getSharedLocations(myId) {
       user.isSharingEnabled &&
       user.allowedUsers.includes(myId)
     ) {
+      const u = users.find((u) => u.id === userIdNum);
       sharedLocations.push({
         userId: userIdNum,
+        userName: u ? u.name : "Unknown",
         location: user.currentLocation,
         lastUpdate: user.lastUpdate,
       });

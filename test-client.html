@@ -1,0 +1,209 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Location Tracker</title>
+</head>
+<body style="margin:10px; font-family:monospace; font-size:13px;">
+
+<h3 style="margin:0 0 6px">Location Tracker &nbsp; <small id="wsStatus" style="font-weight:normal;color:#999"> WS disconnected</small></h3>
+
+<div style="display:flex; height:calc(100vh - 44px); gap:12px;">
+
+    <!-- LEFT -->
+    <div style="width:300px; overflow-y:auto; flex-shrink:0; padding-right:8px;">
+
+        <details open>
+            <summary><b>Auth</b></summary>
+            <p style="margin:6px 0 2px"><b>Register</b></p>
+            <input id="regName" placeholder="Name"><br>
+            <input id="regEmail" placeholder="Email" type="email"><br>
+            <input id="regPassword" placeholder="Password" type="password"><br>
+            <button onclick="register()">Register</button>
+
+            <p style="margin:8px 0 2px"><b>Login</b></p>
+            <input id="loginEmail" placeholder="Email" type="email"><br>
+            <input id="loginPassword" placeholder="Password" type="password"><br>
+            <button onclick="login()">Login</button>
+
+            <p style="margin:6px 0">Logged in as: <b id="meDisplay"></b></p>
+        </details>
+
+        <hr>
+
+        <details open>
+            <summary><b>My Location</b></summary>
+            <br>
+            <button onclick="mockUpdate()">Simulate Location Update</button><br><br>
+            <button onclick="deviceUpdate()">Send My Real GPS</button><br><br>
+            <button onclick="getMyLocation()">View My Saved Location</button>
+        </details>
+
+        <hr>
+
+        <details open>
+            <summary><b>Location Sharing</b></summary>
+            <br>
+            <button onclick="startSharing()">Start Sharing My Location</button><br><br>
+            <button onclick="stopSharing()">Stop Sharing</button>
+            <p style="margin:8px 0 2px">
+                <b>Allow users to see me</b>
+                <button onclick="loadUsers()" style="font-size:11px">refresh</button>
+            </p>
+            <div id="userList" style="margin-bottom:8px"></div>
+            <button onclick="getShared()">See Locations Shared With Me</button>
+        </details>
+
+    </div>
+
+    <!-- RIGHT -->
+    <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+        <b>Response</b>
+        <pre id="output" style="flex:1; overflow-y:auto; border:1px solid #aaa; padding:8px; margin:4px 0 0; white-space:pre-wrap; word-break:break-all;">Responses appear here...</pre>
+    </div>
+
+</div>
+
+<script>
+    const API = 'http://localhost:3000/api';
+    const WS_URL = 'ws://localhost:3000';
+    let token = null;
+    let ws = null;
+
+    function show(data) {
+        document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+    }
+
+    function authHeaders() {
+        return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+    }
+
+    async function api(method, path, body) {
+        if (!token) return show({ error: 'Not logged in' });
+        try {
+            const res = await fetch(API + path, {
+                method,
+                headers: authHeaders(),
+                body: body !== undefined ? JSON.stringify(body) : undefined
+            });
+            const data = await res.json();
+            show(data);
+            return data;
+        } catch (e) {
+            show({ error: e.message });
+        }
+    }
+
+    // Auth
+    async function register() {
+        try {
+            const res = await fetch(API + '/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name:     document.getElementById('regName').value,
+                    email:    document.getElementById('regEmail').value,
+                    password: document.getElementById('regPassword').value
+                })
+            });
+            show(await res.json());
+        } catch (e) { show({ error: e.message }); }
+    }
+
+    async function login() {
+        try {
+            const res = await fetch(API + '/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email:    document.getElementById('loginEmail').value,
+                    password: document.getElementById('loginPassword').value
+                })
+            });
+            const data = await res.json();
+            if (!data.token) return show(data);
+
+            token = data.token;
+
+            // Fetch profile to display name
+            const profRes = await fetch(API + '/users/profile', { headers: authHeaders() });
+            const profile  = await profRes.json();
+            document.getElementById('meDisplay').textContent = profile.name || profile.email || '';
+
+            show({ message: 'Login successful', loggedInAs: profile.name });
+
+            connectWS();   // auto-connect websocket
+            loadUsers();   // populate sharing list
+        } catch (e) { show({ error: e.message }); }
+    }
+
+    // Location
+    async function mockUpdate() {
+        await api('POST', '/location/update', {});
+    }
+
+    function deviceUpdate() {
+        if (!navigator.geolocation) return show({ error: 'Geolocation not supported by this browser' });
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => await api('POST', '/location/update', {
+                location: [pos.coords.latitude, pos.coords.longitude]
+            }),
+            (err) => show({ error: 'GPS error: ' + err.message })
+        );
+    }
+
+    async function getMyLocation() { await api('GET', '/location/current'); }
+
+    // Sharing
+    async function startSharing() { await api('POST', '/location/sharing/start'); }
+    async function stopSharing()  { await api('POST', '/location/sharing/stop');  }
+
+    async function loadUsers() {
+        if (!token) return;
+        try {
+            const res  = await fetch(API + '/users/list', { headers: authHeaders() });
+            const data = await res.json();
+            const el   = document.getElementById('userList');
+            if (!data.users || data.users.length === 0) {
+                el.textContent = 'No other users registered yet.';
+                return;
+            }
+            el.innerHTML = data.users.map(u =>
+                u.name + ' &nbsp;'
+                + '<button onclick="allowUser(\'' + u.name + '\')">Allow</button> '
+                + '<button onclick="removeUser(\'' + u.name + '\')">Remove</button><br>'
+            ).join('');
+        } catch (e) { show({ error: e.message }); }
+    }
+
+    async function allowUser(name)  { await api('POST', '/location/sharing/allow/'  + encodeURIComponent(name)); }
+    async function removeUser(name) { await api('POST', '/location/sharing/remove/' + encodeURIComponent(name)); }
+
+    // Shows current location of users who have explicitly allowed you to see them
+    async function getShared() { await api('GET', '/location/shared'); }
+
+    // WebSocket - connects automatically after login
+    function connectWS() {
+        if (ws) return;
+        ws = new WebSocket(WS_URL);
+        ws.onopen = () => {
+            document.getElementById('wsStatus').textContent = ' WS connected';
+            ws.send(JSON.stringify({ type: 'auth', token }));
+        };
+        ws.onmessage = (e) => {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'location_update') {
+                show({ live_update_from: msg.userName, location: msg.location, time: msg.timestamp });
+            }
+        };
+        ws.onerror = () => {
+            document.getElementById('wsStatus').textContent = ' WS error';
+        };
+        ws.onclose = () => {
+            document.getElementById('wsStatus').textContent = ' WS disconnected';
+            ws = null;
+        };
+    }
+</script>
+</body>
+</html>
