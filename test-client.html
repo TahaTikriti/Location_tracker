@@ -27,6 +27,10 @@
             <button onclick="login()">Login</button>
 
             <p style="margin:6px 0">Logged in as: <b id="meDisplay"></b></p>
+
+            <p style="margin:8px 0 2px"><b>Change Name</b></p>
+            <input id="newName" placeholder="New name"><br>
+            <button onclick="changeName()">Update Name</button>
         </details>
 
         <hr>
@@ -137,6 +141,17 @@
             connectWS();
             loadUsers();
         } catch (e) { show({ error: e.message }); }
+    }
+
+    //  Profile 
+    async function changeName() {
+        const name = document.getElementById('newName').value.trim();
+        if (!name) return show({ error: 'Enter a new name' });
+        const data = await api('PUT', '/users/profile', { name });
+        if (data && data.name) {
+            document.getElementById('meDisplay').textContent = data.name;
+            document.getElementById('newName').value = '';
+        }
     }
 
     //  Location 

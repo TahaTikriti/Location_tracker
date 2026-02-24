@@ -35,25 +35,26 @@ router.put("/profile", authMiddleware, (req, res) => {
   res.json({ message: "Name updated", name: user.name });
 });
 
-// 3. Change password
-router.put("/password", authMiddleware, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  const user = users.find((u) => u.id === req.user.id);
+// // 3. Change password
 
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
-  }
+// router.put("/password", authMiddleware, async (req, res) => {
+//   const { currentPassword, newPassword } = req.body;
+//   const user = users.find((u) => u.id === req.user.id);
 
-  // Check current password
-  const isValid = await bcrypt.compare(currentPassword, user.password);
-  if (!isValid) {
-    return res.status(400).json({ message: "Wrong password" });
-  }
+//   if (!user) {
+//     return res.status(404).json({ message: "User not found" });
+//   }
 
-  // Update to new password
-  user.password = await bcrypt.hash(newPassword, 10);
-  res.json({ message: "Password changed" });
-});
+//   // Check current password
+//   const isValid = await bcrypt.compare(currentPassword, user.password);
+//   if (!isValid) {
+//     return res.status(400).json({ message: "Wrong password" });
+//   }
+
+//   // Update to new password
+//   user.password = await bcrypt.hash(newPassword, 10);
+//   res.json({ message: "Password changed" });
+// });
 
 // 4. Get all users (to choose who to share location with)
 router.get("/list", authMiddleware, (req, res) => {
